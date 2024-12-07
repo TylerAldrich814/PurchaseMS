@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+option go_package = "github.com/TylerAldrich814/commons/api";
+
+package api;
+
+message CreateOrderResponse {
+  string id = 1;
+  string customer_id = 2;
+  string status = 3;
+  repeated Item items = 4;
+}
+
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+}
+
+message Item {
+  string id = 1;
+  string name = 2;
+  int32  quantity = 3;
+  string price_id = 4;
+}
+
+message ItemsWithQuantity {
+  string id = 1;
+  int32  quantity = 2;
+}
+
+message CreateOrderRequest {
+  string customer_id = 1;
+  repeated ItemsWithQuantity items = 2;
+}
+
