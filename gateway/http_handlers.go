@@ -5,15 +5,18 @@ import (
 
 	"github.com/TylerAldrich814/common"
 	pb "github.com/TylerAldrich814/common/api"
+	"github.com/TylerAldrich814/gateway/gateway"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type handler struct {
   // gateway
-  client pb.OrderServiceClient
+  gateway gateway.OrdersGateway
 }
 
-func NewHandler(client pb.OrderServiceClient) *handler {
-  return &handler{client}
+func NewHandler(gateway gateway.OrdersGateway) *handler {
+  return &handler{gateway}
 }
 
 func(h *handler) registerRoutes(mux *http.ServeMux){
@@ -28,8 +31,47 @@ func(h *handler) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
     return
   }
 
-  h.client.CreateOrder(r.Context(), &pb.CreateOrderRequest{
-    CustomerId : customerID,
-    Items      : items,
-  })
+  if err := validateItems(items); err != nil {
+    common.WriteError(w, http.StatusBadRequest, err.Error())
+    return 
+  }
+
+  merged := order
+
+  res, err := h.gateway.CreateOrder(
+    r.Context(), 
+    &pb.CreateOrderRequest{
+      CustomerId: customerID,
+      Items: items,
+    },
+  )
+
+  grpcStatus := status.Convert(err)
+  if grpcStatus != nil {
+    if grpcStatus.Code() != codes.InvalidArgument {
+      common.WriteError(w, http.StatusBadRequest, grpcStatus.Message())
+      return
+    }
+    common.WriteError(w, http.StatusInternalServerError, err.Error())
+    return
+  }
+
+  common.WriteJSON(w, http.StatusOK, res)
+}
+
+func validateItems(items []*pb.ItemsWithQuantity) error {
+  if len(items) == 0 {
+    return common.ErrorNoItems
+  }
+
+  for _, i := range items {
+    if i.Id == "" {
+      return common.ErrorIdRequired
+    }
+    if i.Quantity <= 0 {
+      return common.ErrorQuantityBelowOne
+    }
+  }
+
+  return nil
 }

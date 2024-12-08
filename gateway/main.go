@@ -10,16 +10,17 @@ import (
 	"time"
 
 	"github.com/TylerAldrich814/common"
+	"github.com/TylerAldrich814/gateway/gateway"
 	_ "github.com/joho/godotenv/autoload"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
-  pb "github.com/TylerAldrich814/common/api"
+	"github.com/TylerAldrich814/common/discovery"
+	"github.com/TylerAldrich814/common/discovery/consul"
 )
 
 var (
-  httpAddr = common.EnvString("HTTP_ADDR", ":2000")
-  orderServiceAddr = "localhost:2000"
+  serviceName = "gateway"
+  httpAddr    = common.EnvString("HTTP_ADDR", ":3000")
+  consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
 )
 
 func main(){
@@ -29,23 +30,38 @@ func main(){
   )
   defer cancel()
 
-  conn, err := grpc.Dial(
-    orderServiceAddr, 
-    grpc.WithTransportCredentials(
-      insecure.NewCredentials(),
-    ),
+  registry, err := consul.NewRegistry(
+    consulAddr,
+    serviceName,
   )
   if err != nil {
-    log.Fatalf("Failed to dial gRPC Service at %s\n", orderServiceAddr)
+    panic(err)
   }
-  defer conn.Close()
 
-  log.Printf("Dialing to gRPC Service @ %s\n", orderServiceAddr)
+  instanceID := discovery.GenerateInstanceID(serviceName)
+  if err := registry.Register(
+    ctx, 
+    instanceID,
+    serviceName,
+    httpAddr,
+  ); err != nil {
+    panic(err)
+  }
 
-  client := pb.NewOrderServiceClient(conn)
+  // ->> HealthCheck Routine
+  go func(){
+    for {
+      if err := registry.HealthCheck(instanceID, serviceName); err != nil {
+        log.Fatal("Failed Health Check")
+      }
+      time.Sleep(time.Second * 2)
+    }
+  }()
+  defer registry.Deregister(ctx, instanceID, serviceName)
 
   mux := http.NewServeMux()
-  handler := NewHandler(client)
+  gateway := gateway.NewGRPCGateway(registry)
+  handler := NewHandler(gateway)
   handler.registerRoutes(mux)
 
   srv := &http.Server{
@@ -72,17 +88,9 @@ func main(){
     defer cancel()
 
     if err := srv.Shutdown(timeout); err != nil {
-      log.Fatal("Failed to Shutdown Gateway Server: %w", err)
+      log.Fatalf("Failed to Shutdown Gateway Server: %w\n", err)
     } else {
       log.Println("Gracefully Shutdown Gateway Server ")
     }
   }
 }
-// term := make(chan os.Signal, 1)
-// signal.Notify(term, os.Interrupt, syscall.SIGTERM)
-// go func(){
-//   <-term
-//   if err := srv.Close(); !errors.Is(err, http.ErrServerClosed){
-//     log.Fatal("Error Closing Server: %w", err)
-//   }
-// }()

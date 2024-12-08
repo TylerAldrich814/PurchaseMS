@@ -1,7 +1,5 @@
 package common
 
-
-
 func main(){
 
 }
