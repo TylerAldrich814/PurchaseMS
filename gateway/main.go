@@ -77,8 +77,7 @@ func main(){
     }
   }()
 
-  log.Printf("GATEWAY:: Starting HTTP Server @ %s..\n", httpAddr)
-
+  log.Printf("->> Starting Gateway @ %s..\n", httpAddr)
   select {
   case err := <-ch:
     log.Fatal(err)

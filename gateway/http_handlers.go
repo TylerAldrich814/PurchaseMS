@@ -25,6 +25,7 @@ func(h *handler) registerRoutes(mux *http.ServeMux){
 
 func(h *handler) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
   customerID := r.PathValue("customer_id")
+
   var items []*pb.ItemsWithQuantity
   if err := common.ReadJSON(r, &items); err != nil {
     common.WriteError(w, http.StatusBadRequest, err.Error())
@@ -36,8 +37,6 @@ func(h *handler) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
     return 
   }
 
-  merged := order
-
   res, err := h.gateway.CreateOrder(
     r.Context(), 
     &pb.CreateOrderRequest{
@@ -48,6 +47,7 @@ func(h *handler) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
   grpcStatus := status.Convert(err)
   if grpcStatus != nil {
+
     if grpcStatus.Code() != codes.InvalidArgument {
       common.WriteError(w, http.StatusBadRequest, grpcStatus.Message())
       return
@@ -55,6 +55,11 @@ func(h *handler) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
     common.WriteError(w, http.StatusInternalServerError, err.Error())
     return
   }
+
+  // req := &CreateOrderRequest{
+  //   Order : res,
+  //   // RedirectURL: fmt.Sprintf("")
+  // }
 
   common.WriteJSON(w, http.StatusOK, res)
 }
