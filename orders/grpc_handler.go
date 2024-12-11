@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 
 	pb "github.com/TylerAldrich814/common/api"
@@ -31,19 +30,35 @@ func NewGRPCHandler(
  pb.RegisterOrderServiceServer(grpcServer, handler)
 }
 
+func(grpc *grpcHandler) GetOrder(
+  ctx context.Context, 
+  req *pb.GetOrderRequest,
+) (*pb.CreateOrderResponse, error) {
+  return grpc.service.GetOrder(ctx, req)
+}
+
 func(grpc *grpcHandler) CreateOrder(
   ctx context.Context, 
   req   *pb.CreateOrderRequest,
 ) (*pb.CreateOrderResponse, error) {
-  log.Printf("New Order Received: %s", req)
+  // ->> Validate incoming Order(s)
+  items, err := grpc.service.ValidateOrder(ctx, req)
+  if err != nil {
+    return nil, err
+  }
   
-  order, err := grpc.service.CreateOrder(ctx, req)
+  // ->> Store Incoming Order(s) in Order Service DB
+  order, err := grpc.service.CreateOrder(ctx, req, items)
+  if err != nil {
+    return nil, err
+  }
 
   marshalledOrder, err := json.Marshal(order)
   if err != nil {
     log.Fatal(err)
   }
 
+  // ->> Communicate to the Broker that a new Order has been recorded
   q, err := grpc.channel.QueueDeclare(
     broker.OrderCreatedEvent,
     true,
@@ -56,6 +71,7 @@ func(grpc *grpcHandler) CreateOrder(
     log.Fatal(err)
   }
 
+  // ->> Publish the results of the new Order to gRPC Channel 
   grpc.channel.PublishWithContext(
     ctx,
     "",
@@ -70,15 +86,4 @@ func(grpc *grpcHandler) CreateOrder(
   )
 
   return order, nil
-}
-
-func(grpc *grpcHandler) ValidateOrder(
-  ctx   context.Context, 
-  order *pb.CreateOrderRequest,
-) error {
-  if len(order.Items) == 0 {
-    return errors.New("")
-  }
-
-  return nil
 }

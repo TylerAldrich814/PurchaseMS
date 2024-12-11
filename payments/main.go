@@ -2,20 +2,23 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
-  "syscall"
 
-	_ "github.com/joho/godotenv/autoload"
 	"github.com/TylerAldrich814/common"
 	"github.com/TylerAldrich814/common/broker"
 	"github.com/TylerAldrich814/common/discovery"
 	"github.com/TylerAldrich814/common/discovery/consul"
-  stripeProcessor "github.com/TylerAldrich814/payments/processor/stripe"
-  "github.com/stripe/stripe-go/v81"
+	stripeHandler "github.com/TylerAldrich814/payments/handler/stripe"
+	stripeProcessor "github.com/TylerAldrich814/payments/processor/stripe"
+	_ "github.com/joho/godotenv/autoload"
+	"github.com/stripe/stripe-go/v81"
 	"google.golang.org/grpc"
 )
 
@@ -28,14 +31,15 @@ func Env(key, fallback string) string {
 }
 
 var (
-  serviceName = "payments"
-  stripeKey   = Env("STRIPE_KEY", "")
-  grpcAddr    = common.EnvString("GRPC_ADDR", "localhost:2001")
-  consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
-  amqpUser    = common.EnvString("RABBITMQ_USER", "guest")
-  amqpPass    = common.EnvString("RABBITMQ_PASS", "guest")
-  amqpHost    = common.EnvString("RABBITMQ_HOST", "localhost")
-  amqpPort    = common.EnvString("RABBITMQ_PORT", "5672")
+  serviceName    = "payments"
+  stripeKey      = common.EnvString("STRIPE_KEY", "")
+  httpAddr       = common.EnvString("HTTP_ADDR",     "localhost:8081")
+  grpcAddr       = common.EnvString("GRPC_ADDR",     "localhost:2001")
+  consulAddr     = common.EnvString("CONSUL_ADDR",   "localhost:8500")
+  amqpUser       = common.EnvString("RABBITMQ_USER", "guest")
+  amqpPass       = common.EnvString("RABBITMQ_PASS", "guest")
+  amqpHost       = common.EnvString("RABBITMQ_HOST", "localhost")
+  amqpPort       = common.EnvString("RABBITMQ_PORT", "5672")
 )
 
 
@@ -98,6 +102,30 @@ func main(){
   // ->> RabbitMQ Consumer Connection::
   amqpConsumer := NewConsumer(svc)
   go amqpConsumer.Listen(channel)
+
+  // ->> Payment HTTP Handler Server
+  mux := http.NewServeMux()
+
+  // ->> PaymentHandler Connection:
+  stripePaymentHandler := stripeHandler.
+    NewStripePaymentHandler(
+      ctx,
+      fmt.Sprintf("%s/webhook", httpAddr),
+    )
+  stripePaymentHandler.AwaitForShutdown()
+
+  paymentHandler := NewPaymentHTTPHandler(
+    channel,
+    stripePaymentHandler,
+  )
+  paymentHandler.registerRoutes(mux)
+
+  go func(){
+    log.Printf("->> Started HTTP Server @ %s", httpAddr)
+    if err := http.ListenAndServe(httpAddr, mux); err != nil {
+      log.Fatalf("Failed to start HTTP Server: %w", err)
+    }
+  }()
 
   // ->> gRPC Server Connection::
   grpcServer := grpc.NewServer()

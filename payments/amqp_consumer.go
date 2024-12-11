@@ -12,7 +12,6 @@ import (
 
 type consumer struct {
   service PaymentService
-
 }
 
 func NewConsumer(service PaymentService) *consumer {
@@ -67,7 +66,6 @@ func(c *consumer) Listen(ch *amqp.Channel) {
         log.Printf("Failed to create payment: %v\n", err)
         continue
       }
-
       log.Printf("Payment Link Created:  %s\n", paymentLink)
     }
   }()

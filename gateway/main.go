@@ -60,7 +60,10 @@ func main(){
   defer registry.Deregister(ctx, instanceID, serviceName)
 
   mux := http.NewServeMux()
-  gateway := gateway.NewGRPCGateway(registry)
+  gateway, err := gateway.NewGRPCGateway(ctx, registry)
+  if err != nil {
+    panic(err)
+  }
   handler := NewHandler(gateway)
   handler.registerRoutes(mux)
 
@@ -83,7 +86,7 @@ func main(){
     log.Fatal(err)
   case <-ctx.Done():
     log.Println(" --> Shutting Down")
-    timeout, cancel := context.WithTimeout(context.Background(), time.Second+10)
+    timeout, cancel := context.WithTimeout(context.Background(), time.Second*10)
     defer cancel()
 
     if err := srv.Shutdown(timeout); err != nil {

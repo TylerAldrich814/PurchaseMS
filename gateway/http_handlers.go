@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/TylerAldrich814/common"
@@ -11,7 +12,6 @@ import (
 )
 
 type handler struct {
-  // gateway
   gateway gateway.OrdersGateway
 }
 
@@ -20,11 +20,44 @@ func NewHandler(gateway gateway.OrdersGateway) *handler {
 }
 
 func(h *handler) registerRoutes(mux *http.ServeMux){
-  mux.HandleFunc("POST /api/customers/{customerID}/orders", h.HandleCreateOrder)
+  // ->> Serving Static Files
+  mux.Handle("/", http.FileServer(http.Dir("public")))
+
+  mux.HandleFunc(
+    "POST /api/customers/{customerID}/orders", 
+    h.handleCreateOrder,
+  )
+  mux.HandleFunc(
+    "GET /api/customers/{customerID}/orders/{orderID}",
+    h.handleGetOrder,
+  )
+}
+func(h *handler) handleGetOrder(w http.ResponseWriter, r *http.Request) {
+  customerID := r.PathValue("customerID")
+  orderID := r.PathValue("orderID")
+
+  order, err := h.gateway.GetOrder(r.Context(), customerID, orderID)
+  if order == nil {
+    common.WriteError(w,
+      http.StatusNotFound, 
+      fmt.Sprintf("Customer %s Failed to Get OrderID %s", customerID, orderID),
+    )
+    return
+  }
+  grpcStatus := status.Convert(err)
+  if grpcStatus != nil {
+    if grpcStatus.Code() != codes.InvalidArgument {
+      common.WriteError(w, http.StatusBadRequest, grpcStatus.Message())
+    }
+    common.WriteError(w, http.StatusInternalServerError, err.Error())
+    return
+  }
+  common.WriteJSON(w, http.StatusOK, order)
+  return
 }
 
-func(h *handler) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
-  customerID := r.PathValue("customer_id")
+func(h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
+  customerID := r.PathValue("customerID")
 
   var items []*pb.ItemsWithQuantity
   if err := common.ReadJSON(r, &items); err != nil {
@@ -55,11 +88,6 @@ func(h *handler) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
     common.WriteError(w, http.StatusInternalServerError, err.Error())
     return
   }
-
-  // req := &CreateOrderRequest{
-  //   Order : res,
-  //   // RedirectURL: fmt.Sprintf("")
-  // }
 
   common.WriteJSON(w, http.StatusOK, res)
 }
