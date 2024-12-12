@@ -58,7 +58,7 @@ func(s *ServiceServer) Serve(
         s.instanceID,
         s.serviceName,
       ); err != nil {
-        log.Fatal("%s Health Check Failed: %w", s.serviceName, err)
+        log.Fatalf("%s Health Check Failed: %v", s.serviceName, err)
       }
       time.Sleep(time.Second * 2)
     }

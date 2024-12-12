@@ -5,14 +5,17 @@ import (
 	"testing"
 
 	"github.com/TylerAldrich814/common/api"
+	testInmem "github.com/TylerAldrich814/common/broker/inmem"
+	"github.com/TylerAldrich814/payments/gateway"
 	"github.com/TylerAldrich814/payments/processor/inmem"
 )
 
 
 func TestService(t *testing.T) {
   inMemPaymentProcessor := inmem.NewInMemory()
-
-  svc := NewService(inMemPaymentProcessor)
+  registry := testInmem.NewRegistry()
+  gateway  := gateway.NewGateway(registry)
+  svc      := NewService(inMemPaymentProcessor, gateway)
 
   t.Run("Should Create a Payment Link", func(t *testing.T){
     link, err := svc.CreatePayments(context.Background(), &api.CreateOrderResponse{
@@ -25,6 +28,5 @@ func TestService(t *testing.T) {
     if link == "" {
       t.Errorf("CreatePayment() Link is Empty")
     }
-
   })
 }

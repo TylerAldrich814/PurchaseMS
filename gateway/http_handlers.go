@@ -3,8 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
-
-	"github.com/TylerAldrich814/common"
+  "github.com/TylerAldrich814/common"
 	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/gateway/gateway"
 	"google.golang.org/grpc/codes"
@@ -88,8 +87,16 @@ func(h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
     common.WriteError(w, http.StatusInternalServerError, err.Error())
     return
   }
+  orderRes := &CreateOrderRequest{
+    Order: res,
+    RedirectURL: fmt.Sprintf(
+      "http://localhost:8080/success.html?customerID=%s&orderID=%s",
+      res.CustomerId,
+      res.Id,
+    ),
+  }
 
-  common.WriteJSON(w, http.StatusOK, res)
+  common.WriteJSON(w, http.StatusOK, orderRes)
 }
 
 func validateItems(items []*pb.ItemsWithQuantity) error {

@@ -13,7 +13,6 @@ import (
 
 type grpcHandler struct {
   pb.UnimplementedOrderServiceServer
-
   service OrdersService
   channel *amqp.Channel
 }
@@ -28,13 +27,6 @@ func NewGRPCHandler(
    channel : channel,
  }
  pb.RegisterOrderServiceServer(grpcServer, handler)
-}
-
-func(grpc *grpcHandler) GetOrder(
-  ctx context.Context, 
-  req *pb.GetOrderRequest,
-) (*pb.CreateOrderResponse, error) {
-  return grpc.service.GetOrder(ctx, req)
 }
 
 func(grpc *grpcHandler) CreateOrder(
@@ -87,3 +79,29 @@ func(grpc *grpcHandler) CreateOrder(
 
   return order, nil
 }
+
+func(grpc *grpcHandler) GetOrder(
+  ctx context.Context, 
+  req *pb.GetOrderRequest,
+) (*pb.CreateOrderResponse, error) {
+  return grpc.service.GetOrder(ctx, req)
+}
+
+func(grpc *grpcHandler) UpdateOrder(
+  ctx context.Context,
+  res *pb.CreateOrderResponse,
+)( *pb.CreateOrderResponse, error ){
+  return grpc.service.UpdateOrder(ctx, res)
+}
+
+func(grpc *grpcHandler) DeleteOrder(
+  context.Context, 
+  *pb.CreateOrderResponse,
+)( error ) {
+
+  return nil
+}
+
+
+
+

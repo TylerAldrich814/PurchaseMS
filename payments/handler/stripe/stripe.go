@@ -6,13 +6,17 @@ import (
 	"io"
 	"log"
 	"net/http"
-  "os"
-  "os/exec"
-  "os/signal"
-  "syscall"
+	"os"
+	"os/exec"
+	"os/signal"
+	"syscall"
+	"time"
 
+  pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common"
+	"github.com/TylerAldrich814/common/broker"
 	_ "github.com/joho/godotenv/autoload"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/webhook"
 )
@@ -25,11 +29,13 @@ var (
 type StripePaymentHandler struct {
   secret  string
   execCmd *exec.Cmd
+  channel *amqp.Channel
 }
 
 func NewStripePaymentHandler(
-  ctx context.Context,
-  url string,
+  ctx     context.Context,
+  url     string,
+  channel *amqp.Channel,
 ) *StripePaymentHandler {
 
   var secret string
@@ -57,7 +63,11 @@ func NewStripePaymentHandler(
     startStripeForwardPort(ctx, url, execCmd)
   }
 
-  return &StripePaymentHandler{ secret, execCmd }
+  return &StripePaymentHandler{ 
+    secret, 
+    execCmd,
+    channel,
+  }
 }
 
 func(s *StripePaymentHandler) AwaitForShutdown() {
@@ -90,11 +100,11 @@ func(s *StripePaymentHandler) HandleCheckout(
 
   body, err := io.ReadAll(r.Body)
   if err != nil {
-    log.Printf("handleCheckoutWebhook: Error reading Request Body: %s", err.Error())
+    log.Printf("Stripe::HandleCheckout: Error reading Request Body: %s", err.Error())
     common.WriteError(w, http.StatusBadRequest, "Failed to read Request Body")
     return
   }
-  log.Printf("handleCheckoutWebhook: Successful recieved Body: %s\n", body)
+  log.Printf("Stripe::HandleCheckout: Successful recieved Body: %s\n", body)
 
   event, err := webhook.ConstructEvent(
     body, 
@@ -102,26 +112,60 @@ func(s *StripePaymentHandler) HandleCheckout(
     s.secret,
   )
   if err != nil {
-    log.Printf("handleCheckoutWebhook: Error Verifying Stripe Secret: %s", err.Error())
+    log.Printf("Stripe::HandleCheckout: Error Verifying Stripe Secret: %s", err.Error())
     common.WriteError(w, http.StatusBadRequest, "Failed to verify Stripe Secret")
     return
   }
+  log.Printf("Event: %s", event.Type)
+
   if event.Type == stripe.EventTypeCheckoutSessionExpired {
-    log.Printf("handleCheckoutWebhook: Error Stripe Secret Verification Expired")
+    log.Printf("Stripe::HandleCheckout: Error Stripe Secret Verification Expired")
     common.WriteError(w, http.StatusInternalServerError, "Stripe Secret Verification Expired")
     return
   } else if event.Type == stripe.EventTypeCheckoutSessionCompleted {
     var session stripe.CheckoutSession
     if err := json.Unmarshal(event.Data.Raw, &session); err != nil {
-      log.Printf("handleCheckoutWebhook: Error Parsing Webhook JSON - %s", err.Error())
+      log.Printf("Stripe::HandleCheckout: Error Parsing Webhook JSON - %s", err.Error())
       common.WriteError(w, http.StatusBadRequest, "Failed to Parse Strupe Webhook JSON")
       return
     }
     if session.PaymentStatus == "paid" {
       log.Printf("Payment for Checkout Session %v succeeded.", session.ID)
 
-      // TODO: Publish Payment Success Message
+      orderID := session.Metadata["orderID"]
+      customerID := session.Metadata["customerID"]
+
+      ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+      defer cancel()
+
+      order := &pb.CreateOrderResponse{
+        Id          : orderID,
+        CustomerId  : customerID,
+        Status      : "paid",
+        PaymentLink : "",
+      }
+
+      marshalledOrder, err := json.Marshal(order)
+      if err != nil {
+        log.Printf("Stripe::handleCheckout - Failed to Marshal Order Response - %s", err.Error())
+        common.WriteError(w, http.StatusInternalServerError, "Failed to Marshal Order Response")
+        return
+      }
+
+      s.channel.PublishWithContext(
+        ctx,
+        broker.OrderPaidEvent,
+        "",
+        false,
+        false,
+        amqp.Publishing{
+          ContentType  : "application/json",
+          Body         : marshalledOrder,
+          DeliveryMode : amqp.Persistent,
+        },
+      )
     }
+    log.Printf("Stripe::handleCheckout - Message published \"order.paid\"")
   }
 
   w.WriteHeader(http.StatusOK)

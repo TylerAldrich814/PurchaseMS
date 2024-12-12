@@ -16,17 +16,6 @@ func NewService(store OrdersStore) *service {
   return &service{store}
 }
 
-func(s *service) GetOrder(
-  ctx  context.Context,
-  req  *pb.GetOrderRequest,
-)( *pb.CreateOrderResponse, error ){
-  return s.store.Get(
-    ctx,
-    req.OrderId,
-    req.CustomerId,
-  )
-}
-
 func(s *service) CreateOrder(
   ctx   context.Context,
   req   *pb.CreateOrderRequest,
@@ -70,6 +59,40 @@ func(s *service) ValidateOrder(
   }
 
   return itemsWithPriceTemp, nil
+}
+
+func(s *service) GetOrder(
+  ctx  context.Context,
+  req  *pb.GetOrderRequest,
+)( *pb.CreateOrderResponse, error ){
+  return s.store.Get(
+    ctx,
+    req.OrderId,
+    req.CustomerId,
+  )
+}
+
+func(s *service) UpdateOrder(
+  ctx context.Context,
+  req *pb.CreateOrderResponse,
+)( *pb.CreateOrderResponse,error ){
+  if err := s.store.Update(
+    ctx,
+    req.Id,
+    req,
+  ); err != nil {
+    return nil, err
+  }
+
+  return req, nil
+}
+
+func(s *service) DeleteOrder(
+  ctx context.Context,
+  req *pb.CreateOrderResponse,
+) error {
+
+  return nil
 }
 
 func mergeItemsQuantities(

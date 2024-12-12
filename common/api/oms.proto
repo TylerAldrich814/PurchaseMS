@@ -5,15 +5,17 @@ option go_package = "github.com/TylerAldrich814/commons/api";
 package api;
 
 message CreateOrderResponse {
-  string id = 1;
-  string customer_id = 2;
-  string status = 3;
+  string id           = 1;
+  string customer_id  = 2;
+  string status       = 3;
   repeated Item items = 4;
+  string paymentLink  = 5;
 }
 
 service OrderService {
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
   rpc GetOrder(GetOrderRequest) returns (CreateOrderResponse);
+  rpc UpdateOrder(CreateOrderResponse) returns (CreateOrderResponse);
 }
 
 message GetOrderRequest {

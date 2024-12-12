@@ -15,6 +15,7 @@ import (
 	"github.com/TylerAldrich814/common/broker"
 	"github.com/TylerAldrich814/common/discovery"
 	"github.com/TylerAldrich814/common/discovery/consul"
+	"github.com/TylerAldrich814/payments/gateway"
 	stripeHandler "github.com/TylerAldrich814/payments/handler/stripe"
 	stripeProcessor "github.com/TylerAldrich814/payments/processor/stripe"
 	_ "github.com/joho/godotenv/autoload"
@@ -97,7 +98,8 @@ func main(){
 
   // ->> Payment Service Connection::
   stripeProcessor := stripeProcessor.NewProcessor()
-  svc := NewService(stripeProcessor)
+  gateway := gateway.NewGateway(registry)
+  svc := NewService(stripeProcessor, gateway)
 
   // ->> RabbitMQ Consumer Connection::
   amqpConsumer := NewConsumer(svc)
@@ -111,6 +113,7 @@ func main(){
     NewStripePaymentHandler(
       ctx,
       fmt.Sprintf("%s/webhook", httpAddr),
+      channel,
     )
   stripePaymentHandler.AwaitForShutdown()
 
@@ -123,7 +126,7 @@ func main(){
   go func(){
     log.Printf("->> Started HTTP Server @ %s", httpAddr)
     if err := http.ListenAndServe(httpAddr, mux); err != nil {
-      log.Fatalf("Failed to start HTTP Server: %w", err)
+      log.Fatalf("Failed to start HTTP Server: %v", err)
     }
   }()
 

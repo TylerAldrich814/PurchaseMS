@@ -45,6 +45,10 @@ func(s *Stripe) CreatePaymentLink(
     Mode       : stripe.String(string(stripe.CheckoutSessionModePayment)),
     SuccessURL : stripe.String(gatewaySuccessURL),
     CancelURL  : stripe.String(gatewayCancelURL),
+    Metadata   : map[string]string{
+      "orderID"    : res.Id,
+      "customerID" : res.CustomerId,
+    },
   }
 
   result, err := session.New(params)
