@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"net/http"
-  "github.com/TylerAldrich814/common"
+
+	"github.com/TylerAldrich814/common"
 	pb "github.com/TylerAldrich814/common/api"
+	"github.com/TylerAldrich814/common/errors"
 	"github.com/TylerAldrich814/gateway/gateway"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -101,15 +103,15 @@ func(h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
 func validateItems(items []*pb.ItemsWithQuantity) error {
   if len(items) == 0 {
-    return common.ErrorNoItems
+    return errors.ErrorNoItems
   }
 
   for _, i := range items {
     if i.Id == "" {
-      return common.ErrorIdRequired
+      return errors.ErrorIdRequired
     }
     if i.Quantity <= 0 {
-      return common.ErrorQuantityBelowOne
+      return errors.ErrorQuantityBelowOne
     }
   }
 

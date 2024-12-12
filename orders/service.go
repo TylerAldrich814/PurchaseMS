@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"github.com/TylerAldrich814/common"
 	pb "github.com/TylerAldrich814/common/api"
+	"github.com/TylerAldrich814/common/errors"
 )
 
 type service struct {
@@ -40,7 +40,7 @@ func(s *service) ValidateOrder(
   req *pb.CreateOrderRequest,
 )( []*pb.Item, error ){
   if len(req.Items) == 0 {
-    return nil, common.ErrorNoItems
+    return nil, errors.ErrorNoItems
   }
 
   mergedItems := mergeItemsQuantities(req.Items)

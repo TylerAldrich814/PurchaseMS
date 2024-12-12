@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"github.com/TylerAldrich814/common"
 	pb "github.com/TylerAldrich814/common/api"
+	"github.com/TylerAldrich814/common/errors"
 )
 
 var orders = make([]*pb.CreateOrderResponse, 0)
@@ -46,7 +46,7 @@ func(s *store) Get(
       return order, nil
     }
   }
-  return nil, common.ErrorOrderNotFound
+  return nil, errors.ErrorOrderNotFound
 }
 
 func(s *store) Update(
@@ -62,7 +62,7 @@ func(s *store) Update(
     }
   }
 
-  return common.ErrorOrderNotFound
+  return errors.ErrorOrderNotFound
 }
 
 func(s *store) Delete(
@@ -77,5 +77,5 @@ func(s *store) Delete(
     }
   }
 
-  return common.ErrorOrderNotFound
+  return errors.ErrorOrderNotFound
 }

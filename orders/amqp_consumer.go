@@ -11,34 +11,36 @@ import (
 )
 
 type consumer struct {
-  service PaymentService
+  service OrdersService
 }
 
-func NewConsumer(service PaymentService) *consumer {
+func NewConsumer(service OrdersService) *consumer {
   return &consumer{ service }
 }
 
 func(c *consumer) Listen(channel *amqp.Channel) {
-
-  q, err := channel.QueueDeclare(
-    broker.OrderCreatedEvent,
-    true,
-    false,
-    false,
-    false,
-    nil,
-  )
+  q, err := channel.QueueDeclare("", true, false, true, false, nil)
   if err != nil {
+    log.Fatal(err)
+  }
+
+  if err := channel.QueueBind(
+    q.Name, 
+    "", 
+    broker.OrderPaidEvent, 
+    false, 
+    nil,
+  ); err != nil {
     log.Fatal(err)
   }
 
   msgs, err := channel.Consume(
     q.Name, 
     "", 
-    false,
-    false,
-    false,
-    false,
+    false, 
+    false, 
+    false, 
+    false, 
     nil,
   )
   if err != nil {
@@ -48,34 +50,28 @@ func(c *consumer) Listen(channel *amqp.Channel) {
   var forever chan struct{}
 
   go func(){
+    log.Print("LISTENING AMQP CONSUMER")
     for msg := range msgs {
-      // d.Ack()
-      log.Printf("Received Message: %v", msg)
+      log.Printf("Received Message: %s", msg.Body)
 
       order := &pb.CreateOrderResponse{}
-
-      if err := json.Unmarshal(msg.Body, &order); err != nil {
+      if err := json.Unmarshal(msg.Body, order); err != nil {
         msg.Nack(false, false)
-        log.Printf("Failed to unmarchal order: %v", err)
-        continue;
+        log.Printf("Failed to Unmarshal Order: %s", err.Error())
+        continue
       }
 
-      paymentLink, err := c.service.CreatePayments(
-        context.Background(),
-        order,
-      )
-      if err == nil {
-        log.Printf("Failed to create payment: %v", err)
-
+      _, err := c.service.UpdateOrder(context.Background(), order)
+      if err != nil {
+        log.Println("Failed to update order: %s", err.Error())
         if err := broker.HandleRetry(channel, &msg); err != nil {
           log.Printf("Error Handling Retry: %v", err)
         }
 
-        msg.Nack(false, false)
         continue
       }
-      log.Printf("Payment Link Created:  %s", paymentLink)
 
+      log.Println("Order has been updated from AMQP")
       msg.Ack(false)
     }
   }()

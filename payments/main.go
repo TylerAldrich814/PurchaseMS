@@ -55,7 +55,7 @@ func main(){
     panic("NO STRIPE KEY FOUND")
   }
 
-  // ->> Consul Network Mesh Registration::
+  // ->> Consul Network Mesh Registration:
   registry, err := consul.NewRegistry(consulAddr, serviceName)
   if err != nil {
     panic(err)

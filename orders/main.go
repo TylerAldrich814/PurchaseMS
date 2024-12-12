@@ -33,6 +33,7 @@ func main(){
   )
   defer cancel()
 
+  // ->> Consul Network Mesh Registration:
   registry, err := consul.NewRegistry(
     consulAddr,
     serviceName,
@@ -61,6 +62,7 @@ func main(){
   }()
   defer registry.Deregister(ctx, instanceID, serviceName)
 
+  // ->> RabbitMQ Broker Connection:
   channel, close := broker.Connect(
     amqpUser,
     amqpPass,
@@ -83,6 +85,10 @@ func main(){
   store := NewStore()
   svc := NewService(store)
   NewGRPCHandler(grpcServer, svc, channel)
+
+  // ->> amqp Consumer Connection:
+  amqpConsumer := NewConsumer(svc)
+  go amqpConsumer.Listen(channel)
 
   log.Printf("->> Starting Orders Service @ %s..\n", grpcAddr)
   if err := grpcServer.Serve(listener); err != nil {
