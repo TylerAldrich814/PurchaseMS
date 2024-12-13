@@ -1,6 +1,6 @@
 const urlParams = new URLSearchParams(window.location.search);
-const customerID = urlParams.get("customerID");
-const orderID = urlParams.get("orderID");
+const customerID = urlParams.get("customer_id");
+const orderID = urlParams.get("order_id");
 
 const order = {
   customerID,
@@ -10,6 +10,8 @@ const order = {
 
 async function poolOrderStatus() {
   console.log(`poolORderStatus: ${order.status}`)
+  console.log(`CustomerID: ${customerID}`)
+  console.log(`   orderID: ${orderID}`)
   const response = await fetch(`api/customers/${customerID}/orders/${orderID}`)
 
   const data = await response.json();

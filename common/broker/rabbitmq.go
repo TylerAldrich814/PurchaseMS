@@ -8,6 +8,7 @@ import (
 
 	"github.com/TylerAldrich814/common/errors"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -177,3 +178,44 @@ func createDLQAndDLX(channel *amqp.Channel) error {
   return nil
 }
 
+type AmqpHeaderCarrier map[string]interface{}
+
+func(a AmqpHeaderCarrier) Get(key string) string {
+  value, ok := a[key]
+  if !ok {
+    return ""
+  }
+
+  return value.(string)
+}
+
+func(a AmqpHeaderCarrier) Set(key, val string) {
+  a[key] = val
+}
+
+func(a AmqpHeaderCarrier) Keys() []string {
+  keys := make([]string, len(a))
+  i := 0
+  for key := range a {
+    keys[i] = key
+    i++
+  }
+
+  return keys
+}
+
+func InjectAMQPHeaders(
+  ctx context.Context,
+) map[string]interface{} {
+  carrier := AmqpHeaderCarrier{}
+  otel.GetTextMapPropagator().Inject(ctx, carrier)
+
+  return carrier
+}
+
+func ExtractAMQPHeaders(
+  ctx     context.Context,
+  headers map[string]interface{},
+) context.Context {
+  return otel.GetTextMapPropagator().Extract(ctx, AmqpHeaderCarrier(headers))
+}

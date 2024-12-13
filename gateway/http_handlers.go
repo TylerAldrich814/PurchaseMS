@@ -8,6 +8,9 @@ import (
 	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common/errors"
 	"github.com/TylerAldrich814/gateway/gateway"
+	"go.opentelemetry.io/otel" 
+  otelCodes "go.opentelemetry.io/otel/codes"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -21,7 +24,7 @@ func NewHandler(gateway gateway.OrdersGateway) *handler {
 }
 
 func(h *handler) registerRoutes(mux *http.ServeMux){
-  // ->> Serving Static Files
+  // ->> Static Files
   mux.Handle("/", http.FileServer(http.Dir("public")))
 
   mux.HandleFunc(
@@ -37,7 +40,15 @@ func(h *handler) handleGetOrder(w http.ResponseWriter, r *http.Request) {
   customerID := r.PathValue("customerID")
   orderID := r.PathValue("orderID")
 
-  order, err := h.gateway.GetOrder(r.Context(), customerID, orderID)
+  // ->> Tracer
+  tr := otel.Tracer("http")
+  ctx, span := tr.Start(
+    r.Context(), 
+    fmt.Sprintf("%s %s", r.Method, r.RequestURI),
+  )
+  defer span.End()
+
+  order, err := h.gateway.GetOrder(ctx, customerID, orderID)
   if order == nil {
     common.WriteError(w,
       http.StatusNotFound, 
@@ -47,7 +58,9 @@ func(h *handler) handleGetOrder(w http.ResponseWriter, r *http.Request) {
   }
   grpcStatus := status.Convert(err)
   if grpcStatus != nil {
-    if grpcStatus.Code() != codes.InvalidArgument {
+    span.SetStatus(otelCodes.Error, err.Error())
+
+    if grpcStatus.Code() != codes.Canceled {
       common.WriteError(w, http.StatusBadRequest, grpcStatus.Message())
     }
     common.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -66,13 +79,21 @@ func(h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
     return
   }
 
+  // ->> Tracer
+  tr := otel.Tracer("http")
+  ctx, span := tr.Start(
+    r.Context(), 
+    fmt.Sprintf("%s %s", r.Method, r.RequestURI),
+  )
+  defer span.End()
+
   if err := validateItems(items); err != nil {
     common.WriteError(w, http.StatusBadRequest, err.Error())
     return 
   }
 
   res, err := h.gateway.CreateOrder(
-    r.Context(), 
+    ctx,
     &pb.CreateOrderRequest{
       CustomerId: customerID,
       Items: items,
@@ -81,6 +102,7 @@ func(h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
   grpcStatus := status.Convert(err)
   if grpcStatus != nil {
+    span.SetStatus(otelCodes.Error, err.Error())
 
     if grpcStatus.Code() != codes.InvalidArgument {
       common.WriteError(w, http.StatusBadRequest, grpcStatus.Message())

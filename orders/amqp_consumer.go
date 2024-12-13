@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common/broker"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
 )
 
 type consumer struct {
@@ -54,6 +56,17 @@ func(c *consumer) Listen(channel *amqp.Channel) {
     for msg := range msgs {
       log.Printf("Received Message: %s", msg.Body)
 
+      // -> Extract Headers
+      ctx := broker.ExtractAMQPHeaders(context.Background(), msg.Headers)
+      tr := otel.Tracer("amqp")
+      _, span := tr.Start(
+        ctx,
+        fmt.Sprintf(
+          "AMQP consume - %s",
+          q.Name,
+        ),
+      )
+
       order := &pb.CreateOrderResponse{}
       if err := json.Unmarshal(msg.Body, order); err != nil {
         msg.Nack(false, false)
@@ -67,9 +80,11 @@ func(c *consumer) Listen(channel *amqp.Channel) {
         if err := broker.HandleRetry(channel, &msg); err != nil {
           log.Printf("Error Handling Retry: %v", err)
         }
-
         continue
       }
+
+      span.AddEvent("order.updated")
+      span.End()
 
       log.Println("Order has been updated from AMQP")
       msg.Ack(false)

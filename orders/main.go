@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -14,12 +13,14 @@ import (
 	"github.com/TylerAldrich814/common/discovery/consul"
 	_ "github.com/joho/godotenv/autoload"
 	"google.golang.org/grpc"
+  "go.uber.org/zap"
 )
 
 var (
   serviceName = "orders"
   grpcAddr    = common.EnvString("GRPC_ADDR", "localhost:2000")
   consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
+  jaegerAddr  = common.EnvString("JAEGAR_ADDR", "localhost:4318")
   amqpUser    = common.EnvString("RABBITMQ_USER", "guest")
   amqpPass    = common.EnvString("RABBITMQ_PASS", "guest")
   amqpHost    = common.EnvString("RABBITMQ_HOST", "localhost")
@@ -32,6 +33,16 @@ func main(){
     os.Interrupt,
   )
   defer cancel()
+
+  // ->> Zap Logger Setup:
+  logger, _ := zap.NewProduction()
+  defer logger.Sync()
+  zap.ReplaceGlobals(logger)
+
+  // ->> Global Jaeger Telemetry:
+  if err := common.SetGlobalTracer(ctx, serviceName, jaegerAddr); err != nil {
+    logger.Fatal("Failed to set Global Tracer: %v", zap.Error(err))
+  }
 
   // ->> Consul Network Mesh Registration:
   registry, err := consul.NewRegistry(
@@ -55,7 +66,7 @@ func main(){
   go func(){
     for {
       if err := registry.HealthCheck(instanceID, serviceName); err != nil {
-        log.Fatal("Failed Healt Check")
+        logger.Fatal("Failed Healt Check")
       }
       time.Sleep(time.Second * 2)
     }
@@ -78,20 +89,23 @@ func main(){
 
   listener, err := net.Listen("tcp", grpcAddr)
   if err != nil {
-    log.Fatalf("Failed to listen: %v\n", err)
+    logger.Fatal("Failed to listen: %v\n", zap.Error(err))
   }
   defer listener.Close()
 
   store := NewStore()
   svc := NewService(store)
-  NewGRPCHandler(grpcServer, svc, channel)
+  svcWithTelemetry := NewTelemetryMiddleWare(svc)
+  svcWithLogging := NewLoggerMiddleware(svcWithTelemetry)
+
+  NewGRPCHandler(grpcServer, svcWithLogging, channel)
 
   // ->> amqp Consumer Connection:
-  amqpConsumer := NewConsumer(svc)
+  amqpConsumer := NewConsumer(svcWithLogging)
   go amqpConsumer.Listen(channel)
 
-  log.Printf("->> Starting Orders Service @ %s..\n", grpcAddr)
+  logger.Info("->> Starting Orders Service @ ", zap.String("port",grpcAddr))
   if err := grpcServer.Serve(listener); err != nil {
-    log.Fatal(err.Error())
+    logger.Fatal(err.Error())
   }
 }

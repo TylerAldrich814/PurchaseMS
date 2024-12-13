@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/TylerAldrich814/common"
@@ -23,26 +22,19 @@ import (
 	"google.golang.org/grpc"
 )
 
-func Env(key, fallback string) string {
-  if val, ok := syscall.Getenv(key); ok {
-    return val
-  }
-
-  return fallback
-}
-
 var (
-  serviceName    = "payments"
-  stripeKey      = common.EnvString("STRIPE_KEY", "")
-  httpAddr       = common.EnvString("HTTP_ADDR",     "localhost:8081")
-  grpcAddr       = common.EnvString("GRPC_ADDR",     "localhost:2001")
-  consulAddr     = common.EnvString("CONSUL_ADDR",   "localhost:8500")
-  amqpUser       = common.EnvString("RABBITMQ_USER", "guest")
-  amqpPass       = common.EnvString("RABBITMQ_PASS", "guest")
-  amqpHost       = common.EnvString("RABBITMQ_HOST", "localhost")
-  amqpPort       = common.EnvString("RABBITMQ_PORT", "5672")
-)
+  serviceName = "payments"
+  stripeKey   = common.EnvString("STRIPE_KEY", "")
+  httpAddr    = common.EnvString("HTTP_ADDR", "localhost:8081")
+  grpcAddr    = common.EnvString("GRPC_ADDR", "localhost:2001")
+  jaegerAddr  = common.EnvString("JAEGAR_ADDR", "localhost:4318")
 
+  consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
+  amqpUser    = common.EnvString("RABBITMQ_USER", "guest")
+  amqpPass    = common.EnvString("RABBITMQ_PASS", "guest")
+  amqpHost    = common.EnvString("RABBITMQ_HOST", "localhost")
+  amqpPort    = common.EnvString("RABBITMQ_PORT", "5672")
+)
 
 func main(){
   ctx, cancel := signal.NotifyContext(
@@ -50,6 +42,11 @@ func main(){
     os.Interrupt,
   )
   defer cancel()
+
+  // ->> Global Jaeger Telemetry:
+  if err := common.SetGlobalTracer(ctx, serviceName, jaegerAddr); err != nil {
+    log.Fatalf("Failed to set Global Tracer: %v", err)
+  }
 
   if stripeKey == "" {
     panic("NO STRIPE KEY FOUND")
@@ -100,9 +97,10 @@ func main(){
   stripeProcessor := stripeProcessor.NewProcessor()
   gateway := gateway.NewGateway(registry)
   svc := NewService(stripeProcessor, gateway)
+  svcWithTelemetry := NewTelemetryMiddleware( svc )
 
   // ->> RabbitMQ Consumer Connection::
-  amqpConsumer := NewConsumer(svc)
+  amqpConsumer := NewConsumer(svcWithTelemetry)
   go amqpConsumer.Listen(channel)
 
   // ->> Payment HTTP Handler Server

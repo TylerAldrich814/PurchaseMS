@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common/broker"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
 )
 
 type consumer struct {
@@ -52,8 +54,18 @@ func(c *consumer) Listen(channel *amqp.Channel) {
       // d.Ack()
       log.Printf("Received Message: %v", msg)
 
-      order := &pb.CreateOrderResponse{}
+      // -> Extract Headers
+      ctx := broker.ExtractAMQPHeaders(context.Background(), msg.Headers)
+      tr := otel.Tracer("amqp")
+      _, msgSpan := tr.Start(
+        ctx,
+        fmt.Sprintf(
+          "AMQP - consume - %s",
+          q.Name,
+        ),
+      )
 
+      order := &pb.CreateOrderResponse{}
       if err := json.Unmarshal(msg.Body, &order); err != nil {
         msg.Nack(false, false)
         log.Printf("Failed to unmarchal order: %v", err)
@@ -64,7 +76,7 @@ func(c *consumer) Listen(channel *amqp.Channel) {
         context.Background(),
         order,
       )
-      if err == nil {
+      if err != nil {
         log.Printf("Failed to create payment: %v", err)
 
         if err := broker.HandleRetry(channel, &msg); err != nil {
@@ -74,8 +86,14 @@ func(c *consumer) Listen(channel *amqp.Channel) {
         msg.Nack(false, false)
         continue
       }
-      log.Printf("Payment Link Created:  %s", paymentLink)
 
+      msgSpan.AddEvent(fmt.Sprintf(
+        "payment.created: %s",
+        paymentLink,
+      ))
+      msgSpan.End()
+
+      log.Printf("Payment Link Created:  %s", paymentLink)
       msg.Ack(false)
     }
   }()

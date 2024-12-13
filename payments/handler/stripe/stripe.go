@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -10,15 +11,15 @@ import (
 	"os/exec"
 	"os/signal"
 	"syscall"
-	"time"
 
-  pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common"
+	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common/broker"
 	_ "github.com/joho/godotenv/autoload"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/webhook"
+	"go.opentelemetry.io/otel"
 )
 
 var (
@@ -46,7 +47,6 @@ func NewStripePaymentHandler(
     if err != nil {
       panic(err)
     }
-    log.Printf("Obtained Secret: \"%s\"", s)
     secret = s
   } else {
     secret = stripeSecret
@@ -118,6 +118,7 @@ func(s *StripePaymentHandler) HandleCheckout(
   }
   log.Printf("Event: %s", event.Type)
 
+
   if event.Type == stripe.EventTypeCheckoutSessionExpired {
     log.Printf("Stripe::HandleCheckout: Error Stripe Secret Verification Expired")
     common.WriteError(w, http.StatusInternalServerError, "Stripe Secret Verification Expired")
@@ -135,9 +136,6 @@ func(s *StripePaymentHandler) HandleCheckout(
       orderID := session.Metadata["orderID"]
       customerID := session.Metadata["customerID"]
 
-      ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-      defer cancel()
-
       order := &pb.CreateOrderResponse{
         Id          : orderID,
         CustomerId  : customerID,
@@ -152,8 +150,20 @@ func(s *StripePaymentHandler) HandleCheckout(
         return
       }
 
+      tr := otel.Tracer("amqp")
+      amqpContext, msgSpan := tr.Start(
+        r.Context(),
+        fmt.Sprintf(
+          "AMQP - publish - %s",
+          broker.OrderPaidEvent,
+        ),
+      )
+      defer msgSpan.End()
+
+      headers := broker.InjectAMQPHeaders(amqpContext)
+
       s.channel.PublishWithContext(
-        ctx,
+        amqpContext,
         broker.OrderPaidEvent,
         "",
         false,
@@ -162,6 +172,7 @@ func(s *StripePaymentHandler) HandleCheckout(
           ContentType  : "application/json",
           Body         : marshalledOrder,
           DeliveryMode : amqp.Persistent,
+          Headers      : headers,
         },
       )
     }

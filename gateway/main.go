@@ -21,6 +21,7 @@ var (
   serviceName = "gateway"
   httpAddr    = common.EnvString("HTTP_ADDR", ":3000")
   consulAddr  = common.EnvString("CONSUL_ADDR", "localhost:8500")
+  jaegerAddr  = common.EnvString("JAEGAR_ADDR", "localhost:4318")
 )
 
 func main(){
@@ -29,6 +30,11 @@ func main(){
     os.Interrupt,
   )
   defer cancel()
+
+  // ->> Global Jaeger Telemetry:
+  if err := common.SetGlobalTracer(ctx, serviceName, jaegerAddr); err != nil {
+    log.Fatalf("Failed to set Global Tracer: %v", err)
+  }
 
   registry, err := consul.NewRegistry(
     consulAddr,

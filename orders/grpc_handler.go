@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common/broker"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 )
 
@@ -33,23 +35,6 @@ func(grpc *grpcHandler) CreateOrder(
   ctx context.Context, 
   req   *pb.CreateOrderRequest,
 ) (*pb.CreateOrderResponse, error) {
-  // ->> Validate incoming Order(s)
-  items, err := grpc.service.ValidateOrder(ctx, req)
-  if err != nil {
-    return nil, err
-  }
-  
-  // ->> Store Incoming Order(s) in Order Service DB
-  order, err := grpc.service.CreateOrder(ctx, req, items)
-  if err != nil {
-    return nil, err
-  }
-
-  marshalledOrder, err := json.Marshal(order)
-  if err != nil {
-    log.Fatal(err)
-  }
-
   // ->> Communicate to the Broker that a new Order has been recorded
   q, err := grpc.channel.QueueDeclare(
     broker.OrderCreatedEvent,
@@ -63,9 +48,39 @@ func(grpc *grpcHandler) CreateOrder(
     log.Fatal(err)
   }
 
-  // ->> Publish the results of the new Order to gRPC Channel 
-  grpc.channel.PublishWithContext(
+  tr := otel.Tracer("amqp")
+  amqpContext, msgSpan := tr.Start(
     ctx,
+    fmt.Sprintf(
+      "AMQP - publish - %s",
+      q.Name,
+    ),
+  )
+  defer msgSpan.End()
+
+  // ->> Validate incoming Order(s)
+  items, err := grpc.service.ValidateOrder(amqpContext, req)
+  if err != nil {
+    return nil, err
+  }
+  
+  // ->> Store Incoming Order(s) in Order Service DB
+  order, err := grpc.service.CreateOrder(amqpContext, req, items)
+  if err != nil {
+    return nil, err
+  }
+
+  marshalledOrder, err := json.Marshal(order)
+  if err != nil {
+    log.Fatal(err)
+  }
+
+  // -> Context Header Injection
+  headers := broker.InjectAMQPHeaders(amqpContext)
+
+  // ->> Publish the results of the new Order to gRPC Channel:
+  grpc.channel.PublishWithContext(
+    amqpContext,
     "",
     q.Name,
     false,
@@ -74,6 +89,7 @@ func(grpc *grpcHandler) CreateOrder(
       ContentType  : "application/json",
       Body         : marshalledOrder,
       DeliveryMode : amqp.Persistent,
+      Headers      : headers,
     },
   )
 
@@ -101,7 +117,4 @@ func(grpc *grpcHandler) DeleteOrder(
 
   return nil
 }
-
-
-
 
