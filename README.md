@@ -99,38 +99,6 @@ air init && air
    '{"ID": 123, "Quantity": 2}'
    ```
 
-## Flowchart
-```flow
-st=>start: User Request
-op1=>operation: Gateway Receives Request
-op2=>operation: Orders Service Processes Request
-op3=>operation: Payments Service Processes Payment
-op4=>operation: Stripe Payment Handler
-cond1=>condition: Stock Validated?
-cond2=>condition: Payment Successful?
-e=>end: Response to User
-
-st->op1->op2->cond1
-cond1(yes)->op3->op4->cond2
-cond2(yes)->e
-cond1(no)->e
-cond2(no)->e
-```
-
-## Sequence Diagram
-```seq
-User->Gateway: Sends HTTP Request
-Gateway->Orders: gRPC Request for New Order
-Orders->Stock: Validates Stock
-Stock-->Orders: Returns Stock Status
-Orders->Payments: Initiates Payment
-Payments->Stripe: Processes Payment
-Stripe-->Payments: Returns Payment Link
-Payments-->Orders: Confirms Payment
-Orders-->Gateway: Sends Response
-Gateway-->User: Returns Payment Link
-```
-
 ## Future Plans
 - Implement Kitchen and Stock services.
 - Add robust error handling and logging.
