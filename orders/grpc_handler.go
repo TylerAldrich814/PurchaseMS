@@ -9,8 +9,8 @@ import (
 	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common/broker"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.opentelemetry.io/otel"
-	"google.golang.org/grpc"
+	"go.opentelemetry.io/otel" 
+  "google.golang.org/grpc"
 )
 
 type grpcHandler struct {
@@ -24,11 +24,11 @@ func NewGRPCHandler(
   service     OrdersService,
   channel    *amqp.Channel,
 ) {
- handler := &grpcHandler{
-   service : service,
-   channel : channel,
- }
- pb.RegisterOrderServiceServer(grpcServer, handler)
+  handler := &grpcHandler{
+    service : service,
+    channel : channel,
+  }
+  pb.RegisterOrderServiceServer(grpcServer, handler)
 }
 
 func(grpc *grpcHandler) CreateOrder(
@@ -112,9 +112,9 @@ func(grpc *grpcHandler) UpdateOrder(
 
 func(grpc *grpcHandler) DeleteOrder(
   context.Context, 
-  *pb.CreateOrderResponse,
-)( error ) {
+  *pb.DeleteOrderRequest,
+)( *pb.DeleteOrderResponse, error ) {
 
-  return nil
+  return nil, nil
 }
 

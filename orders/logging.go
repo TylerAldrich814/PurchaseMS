@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"time"
 
 	"github.com/TylerAldrich814/common"
 	pb "github.com/TylerAldrich814/common/api"
-	"go.uber.org/zap"
 )
 
 type LoggingMiddleware struct {

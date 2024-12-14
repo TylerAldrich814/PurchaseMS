@@ -1,19 +1,26 @@
 package main
 
-import (
-	"context"
+import ( "context"
 	"log"
 
 	pb "github.com/TylerAldrich814/common/api"
 	"github.com/TylerAldrich814/common/errors"
+	"github.com/TylerAldrich814/orders/gateway"
 )
 
 type service struct {
-  store OrdersStore
+  store   OrdersStore
+  gateway gateway.StockGateway
 }
 
-func NewService(store OrdersStore) *service {
-  return &service{store}
+func NewService(
+  store   OrdersStore,
+  gateway gateway.StockGateway,
+) *service {
+  return &service{
+    store,
+    gateway,
+  }
 }
 
 func(s *service) CreateOrder(
@@ -40,25 +47,23 @@ func(s *service) ValidateOrder(
   req *pb.CreateOrderRequest,
 )( []*pb.Item, error ){
   if len(req.Items) == 0 {
-    return nil, errors.ErrorNoItems
+    return nil, errors.NoItems
   }
-
-  mergedItems := mergeItemsQuantities(req.Items)
-  log.Print(mergedItems)
 
   // ->> Validate with the Stock Service
-
-  // TODO: TEMP
-  var itemsWithPriceTemp []*pb.Item
-  for _, item := range mergedItems {
-    itemsWithPriceTemp = append(itemsWithPriceTemp, &pb.Item{
-      PriceId  : "price_1QUDOtGzCrbvBMvK9wsNawMv",
-      Id       : item.Id,
-      Quantity : item.Quantity,
-    })
+  inStock, items, err := s.gateway.CheckIfItemIsInStock(
+    ctx,
+    req.CustomerId,
+    mergeItemsQuantities(req.Items),
+  )
+  if err != nil {
+    return nil, err
+  }
+  if !inStock {
+    return nil, errors.Stock_ItemOutOfStock
   }
 
-  return itemsWithPriceTemp, nil
+  return items, nil
 }
 
 func(s *service) GetOrder(

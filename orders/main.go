@@ -11,9 +11,10 @@ import (
 	"github.com/TylerAldrich814/common/broker"
 	"github.com/TylerAldrich814/common/discovery"
 	"github.com/TylerAldrich814/common/discovery/consul"
+	"github.com/TylerAldrich814/orders/gateway"
 	_ "github.com/joho/godotenv/autoload"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
-  "go.uber.org/zap"
 )
 
 var (
@@ -93,8 +94,10 @@ func main(){
   }
   defer listener.Close()
 
+  stockGateway := gateway.NewGateway(registry)
+
   store := NewStore()
-  svc := NewService(store)
+  svc := NewService(store, stockGateway)
   svcWithTelemetry := NewTelemetryMiddleWare(svc)
   svcWithLogging := NewLoggerMiddleware(svcWithTelemetry)
 

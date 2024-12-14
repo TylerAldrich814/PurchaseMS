@@ -46,7 +46,7 @@ func(s *store) Get(
       return order, nil
     }
   }
-  return nil, errors.ErrorOrderNotFound
+  return nil, errors.OrderNotFound
 }
 
 func(s *store) Update(
@@ -62,7 +62,7 @@ func(s *store) Update(
     }
   }
 
-  return errors.ErrorOrderNotFound
+  return errors.OrderNotFound
 }
 
 func(s *store) Delete(
@@ -77,5 +77,5 @@ func(s *store) Delete(
     }
   }
 
-  return errors.ErrorOrderNotFound
+  return errors.OrderNotFound
 }

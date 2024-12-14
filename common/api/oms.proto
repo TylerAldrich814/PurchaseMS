@@ -4,6 +4,18 @@ option go_package = "github.com/TylerAldrich814/commons/api";
 
 package api;
 
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  rpc GetOrder(GetOrderRequest) returns (CreateOrderResponse);
+  rpc UpdateOrder(CreateOrderResponse) returns (CreateOrderResponse);
+  rpc DeleteOrder(DeleteOrderRequest) returns (DeleteOrderResponse);
+}
+
+service StockService {
+  rpc CheckIfItemIsInStock(CheckIfItemIsInStockRequest) returns (CheckIfItemIsInStockResponse);
+  rpc GetItems(GetItemsRequest) returns (GetItemsResponse);
+}
+
 message CreateOrderResponse {
   string id           = 1;
   string customer_id  = 2;
@@ -12,15 +24,18 @@ message CreateOrderResponse {
   string paymentLink  = 5;
 }
 
-service OrderService {
-  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
-  rpc GetOrder(GetOrderRequest) returns (CreateOrderResponse);
-  rpc UpdateOrder(CreateOrderResponse) returns (CreateOrderResponse);
-}
-
 message GetOrderRequest {
   string order_id    = 1;
   string customer_id = 2;
+}
+
+message DeleteOrderRequest {
+  string order_id    = 1;
+  string customer_id = 2;
+}
+
+message DeleteOrderResponse {
+  string order_id    = 1;
 }
 
 message Item {
@@ -40,3 +55,18 @@ message CreateOrderRequest {
   repeated ItemsWithQuantity items = 2;
 }
 
+message CheckIfItemIsInStockRequest {
+  repeated ItemsWithQuantity items = 1;
+}
+
+message CheckIfItemIsInStockResponse {
+  bool in_stock       = 1;
+  repeated Item items = 2;
+}
+
+message GetItemsRequest {
+  repeated string item_ids = 1;
+}
+message GetItemsResponse {
+  repeated Item items = 1;
+}

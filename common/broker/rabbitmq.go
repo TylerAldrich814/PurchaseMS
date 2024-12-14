@@ -102,7 +102,7 @@ func HandleRetry(
         DeliveryMode : amqp.Persistent,
       },
     )
-    return errors.ErrorAMQP_RetryFailed
+    return errors.AMQP_RetryFailed
   }
   time.Sleep(time.Second * time.Duration(retryCount))
 

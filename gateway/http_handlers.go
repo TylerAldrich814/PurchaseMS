@@ -125,15 +125,15 @@ func(h *handler) handleCreateOrder(w http.ResponseWriter, r *http.Request) {
 
 func validateItems(items []*pb.ItemsWithQuantity) error {
   if len(items) == 0 {
-    return errors.ErrorNoItems
+    return errors.NoItems
   }
 
   for _, i := range items {
     if i.Id == "" {
-      return errors.ErrorIdRequired
+      return errors.IdRequired
     }
     if i.Quantity <= 0 {
-      return errors.ErrorQuantityBelowOne
+      return errors.QuantityBelowOne
     }
   }
 
